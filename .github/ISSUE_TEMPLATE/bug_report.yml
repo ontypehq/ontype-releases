@@ -1,0 +1,80 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out the sections below.
+
+  - type: input
+    id: version
+    attributes:
+      label: OnType version
+      placeholder: e.g. 1.3.0
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: e.g. macOS 15.3
+    validations:
+      required: true
+
+  - type: input
+    id: chip
+    attributes:
+      label: Apple Silicon chip
+      placeholder: e.g. M1 Pro, M4 Max
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Open OnType
+        2. Hold hotkey and speak
+        3. ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Paste relevant logs from `~/Library/Logs/OnType/ontype.log`.
+      render: text
+    validations:
+      required: false
+
+  - type: dropdown
+    id: target-app
+    attributes:
+      label: Which app were you using?
+      options:
+        - All apps
+        - Specific app (describe above)
+    validations:
+      required: false
