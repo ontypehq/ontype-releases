@@ -137,6 +137,10 @@ jobs:
         working-directory: OnType
         run: bun install --frozen-lockfile --ignore-scripts
 
+      - name: Install embedded WebUI dependencies
+        working-directory: OnType/webui
+        run: bun install --frozen-lockfile --ignore-scripts
+
       - name: Build libfst dynamic library for ITN export
         working-directory: libfst
         run: zig build -Dlinkage=dynamic -Doptimize=ReleaseFast
