@@ -51,8 +51,9 @@ Required repository secrets:
   `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, and `SENTRY_TRACES_SAMPLE_RATE`.
 
 Nightly builds intentionally do not run `bun run app:release --publish`; they
-produce notarized DMGs and attach them to GitHub Releases only. Sparkle/R2
-publishing should stay on a separate, explicitly approved workflow.
+produce arm64 notarized DMGs and attach them to GitHub Releases only. Multi-arch
+builds and Sparkle/R2 publishing should stay on a separate, explicitly approved
+workflow for formal releases.
 
 ## How it works
 

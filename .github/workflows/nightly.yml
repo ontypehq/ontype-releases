@@ -10,15 +10,6 @@ on:
       version:
         description: Optional app version. Defaults to 0.0.0-beta.YYYYMMDD.RUN.SHA.
         required: false
-      platform:
-        description: macOS architecture set
-        required: true
-        default: arm64
-        type: choice
-        options:
-          - arm64
-          - x86
-          - all
       notarized:
         description: Notarize the DMG before upload
         required: true
@@ -36,7 +27,7 @@ concurrency:
 
 env:
   ONTYPE_SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || 'main' }}
-  ONTYPE_PLATFORM: ${{ github.event_name == 'workflow_dispatch' && inputs.platform || 'arm64' }}
+  ONTYPE_PLATFORM: arm64
   ONTYPE_NOTARIZED: ${{ github.event_name != 'workflow_dispatch' || inputs.notarized }}
   NIGHTLY_TAG: nightly
 
@@ -69,7 +60,9 @@ jobs:
           path: OnType
           fetch-depth: 1
           lfs: true
-          persist-credentials: false
+          # The source repo currently has an orphan gitlink without .gitmodules;
+          # checkout's credential cleanup runs `git submodule foreach` and fails there.
+          persist-credentials: true
 
       - name: Checkout libfst
         uses: actions/checkout@v6.0.2
