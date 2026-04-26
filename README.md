@@ -23,6 +23,37 @@ Grab the latest `.dmg` from [**Releases**](https://github.com/ontypehq/ontype-re
 
 **Requirements:** macOS 15+ (Sequoia), Apple Silicon (M1 or later).
 
+Nightly builds are published as the rolling
+[nightly prerelease](https://github.com/ontypehq/ontype-releases/releases/tag/nightly).
+
+## CI
+
+This public repository hosts the macOS nightly build workflow so GitHub-hosted
+macOS minutes are available to the release pipeline. The workflow checks out the
+private source repositories at build time:
+
+- `ontypehq/OnType`
+- `ontypehq/libfst`
+- `ontypehq/itn`
+
+Required repository secrets:
+
+- `ONTYPE_SOURCE_TOKEN`: token with read access to the private source repos.
+- `NOTARY_KEY_P8_BASE64`: base64-encoded App Store Connect API key file
+  (`AuthKey_UPM4638DP7.p8` locally).
+- OnType release env copied from the private app repo `.env`: `ONTYPE_AUTH_BASE_URL`,
+  `ONTYPE_AUTH_BASE_URL_DEV`, `ONTYPE_AUTH_BASE_URL_PROD`, `CONVEX_URL_DEV`,
+  `CONVEX_URL_PROD`, `DEVELOPER_ID_CERT_BASE64`, `P12_PASSWORD`,
+  `KEYCHAIN_PASSWORD`, `APPLE_ID`, `APPLE_ID_PWD`, `APPLE_TEAM_ID`,
+  `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`, `CF_ACCOUNT_ID`, `CF_R2_BUCKET`,
+  `CF_R2_ACCESS_KEY_ID`, `CF_R2_SECRET_ACCESS_KEY`, `CF_R2_ENDPOINT`,
+  `CF_ASSETS_BASE_URL`, `SPARKLE_ED_PRIVATE_KEY`, `SENTRY_ORG`,
+  `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, and `SENTRY_TRACES_SAMPLE_RATE`.
+
+Nightly builds intentionally do not run `bun run app:release --publish`; they
+produce notarized DMGs and attach them to GitHub Releases only. Sparkle/R2
+publishing should stay on a separate, explicitly approved workflow.
+
 ## How it works
 
 **Hold** your hotkey → **Speak** naturally → **Release** to type. That's it.
