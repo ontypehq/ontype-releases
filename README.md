@@ -48,7 +48,8 @@ Required repository secrets:
   `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`, `CF_ACCOUNT_ID`, `CF_R2_BUCKET`,
   `CF_R2_ACCESS_KEY_ID`, `CF_R2_SECRET_ACCESS_KEY`, `CF_R2_ENDPOINT`,
   `CF_ASSETS_BASE_URL`, `SPARKLE_ED_PRIVATE_KEY`, `SENTRY_ORG`,
-  `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, and `SENTRY_TRACES_SAMPLE_RATE`.
+  `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, `SENTRY_TRACES_SAMPLE_RATE`,
+  `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN`, and `VITE_PUBLIC_POSTHOG_HOST`.
 
 Nightly builds intentionally do not run `bun run app:release --publish`; they
 produce arm64 notarized DMGs and attach them to GitHub Releases only. Multi-arch
