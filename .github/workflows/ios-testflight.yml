@@ -1,0 +1,208 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: OnType branch, tag, or SHA to build
+        required: false
+        default: main
+      app_version:
+        description: CFBundleShortVersionString to ship to TestFlight
+        required: false
+        default: '1.0'
+      upload:
+        description: Upload the exported IPA to App Store Connect
+        required: true
+        default: true
+        type: boolean
+  repository_dispatch:
+    types:
+      - ios-testflight
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+env:
+  ONTYPE_SOURCE_REF: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.source_ref || inputs.source_ref || 'main' }}
+  ONTYPE_SOURCE_SHA: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.source_sha || '' }}
+  ONTYPE_IOS_APP_VERSION: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.app_version || inputs.app_version || '1.0' }}
+  ONTYPE_IOS_APP_ID: '6767589100'
+  ONTYPE_IOS_UPLOAD: ${{ github.event_name == 'repository_dispatch' || inputs.upload }}
+
+jobs:
+  build:
+    name: Build and upload iOS TestFlight
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout release repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Check private source token
+        env:
+          ONTYPE_SOURCE_TOKEN: ${{ secrets.ONTYPE_SOURCE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ONTYPE_SOURCE_TOKEN:-}" ]; then
+            echo "ONTYPE_SOURCE_TOKEN is required to checkout the private OnType source repository." >&2
+            exit 1
+          fi
+
+      - name: Checkout OnType source
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ontypehq/OnType
+          ref: ${{ env.ONTYPE_SOURCE_REF }}
+          token: ${{ secrets.ONTYPE_SOURCE_TOKEN }}
+          path: OnType
+          fetch-depth: 1
+          lfs: true
+          persist-credentials: false
+
+      - name: Verify dispatched source SHA
+        if: env.ONTYPE_SOURCE_SHA != ''
+        working-directory: OnType
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$ONTYPE_SOURCE_SHA" ]; then
+            echo "Checked out $actual_sha, expected dispatched SHA $ONTYPE_SOURCE_SHA." >&2
+            exit 1
+          fi
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1.7.0
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: latest
+
+      - name: Install build tools
+        run: brew install asc xcodegen
+
+      - name: Install signing certificate
+        env:
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${IOS_DISTRIBUTION_CERT_BASE64:-}" ] || [ -z "${IOS_DISTRIBUTION_CERT_PASSWORD:-}" ] || [ -z "${KEYCHAIN_PASSWORD:-}" ]; then
+            echo "IOS_DISTRIBUTION_CERT_BASE64, IOS_DISTRIBUTION_CERT_PASSWORD, and KEYCHAIN_PASSWORD are required." >&2
+            exit 1
+          fi
+
+          cert_path="$RUNNER_TEMP/ios_distribution.p12"
+          keychain_path="$RUNNER_TEMP/ontype-ios-signing.keychain-db"
+          printf '%s' "$IOS_DISTRIBUTION_CERT_BASE64" | base64 -D > "$cert_path"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$cert_path" -P "$IOS_DISTRIBUTION_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security list-keychains -d user -s "$keychain_path" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -s "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain_path"
+
+      - name: Install provisioning profiles
+        env:
+          IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+          IOS_KEYBOARD_PROFILE_BASE64: ${{ secrets.IOS_KEYBOARD_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${IOS_APP_PROFILE_BASE64:-}" ] || [ -z "${IOS_KEYBOARD_PROFILE_BASE64:-}" ]; then
+            echo "IOS_APP_PROFILE_BASE64 and IOS_KEYBOARD_PROFILE_BASE64 are required." >&2
+            exit 1
+          fi
+
+          profile_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profile_dir"
+          printf '%s' "$IOS_APP_PROFILE_BASE64" | base64 -D > "$profile_dir/OnType iOS App Store.mobileprovision"
+          printf '%s' "$IOS_KEYBOARD_PROFILE_BASE64" | base64 -D > "$profile_dir/OnType iOS Keyboard App Store.mobileprovision"
+
+      - name: Prepare App Store Connect API key
+        working-directory: OnType
+        env:
+          ASC_IOS_KEY_ID: ${{ secrets.ASC_IOS_KEY_ID }}
+          ASC_IOS_ISSUER_ID: ${{ secrets.ASC_IOS_ISSUER_ID }}
+          ASC_IOS_KEY_P8_BASE64: ${{ secrets.ASC_IOS_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ASC_IOS_KEY_ID:-}" ] || [ -z "${ASC_IOS_ISSUER_ID:-}" ] || [ -z "${ASC_IOS_KEY_P8_BASE64:-}" ]; then
+            echo "ASC_IOS_KEY_ID, ASC_IOS_ISSUER_ID, and ASC_IOS_KEY_P8_BASE64 are required." >&2
+            exit 1
+          fi
+
+          key_path="$RUNNER_TEMP/AuthKey_${ASC_IOS_KEY_ID}.p8"
+          printf '%s' "$ASC_IOS_KEY_P8_BASE64" | base64 -D > "$key_path"
+          chmod 600 "$key_path"
+          asc auth login --bypass-keychain --local --network --name ci-ios --key-id "$ASC_IOS_KEY_ID" --issuer-id "$ASC_IOS_ISSUER_ID" --private-key "$key_path"
+          asc auth switch --name ci-ios
+
+      - name: Install OnType dependencies
+        working-directory: OnType
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Build iOS IPA and upload to TestFlight
+        working-directory: OnType
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          ONTYPE_AUTH_BASE_URL: ${{ secrets.ONTYPE_AUTH_BASE_URL }}
+          ONTYPE_AUTH_BASE_URL_DEV: ${{ secrets.ONTYPE_AUTH_BASE_URL_DEV }}
+          ONTYPE_AUTH_BASE_URL_PROD: ${{ secrets.ONTYPE_AUTH_BASE_URL_PROD }}
+          CONVEX_URL_DEV: ${{ secrets.CONVEX_URL_DEV }}
+          CONVEX_URL_PROD: ${{ secrets.CONVEX_URL_PROD }}
+          DEVELOPER_ID_CERT_BASE64: ${{ secrets.DEVELOPER_ID_CERT_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PWD: ${{ secrets.APPLE_ID_PWD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY_FILE: AuthKey_UNUSED_BY_IOS.p8
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_R2_BUCKET: ${{ secrets.CF_R2_BUCKET }}
+          CF_R2_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          CF_R2_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          CF_R2_ENDPOINT: ${{ secrets.CF_R2_ENDPOINT }}
+          CF_ASSETS_BASE_URL: ${{ secrets.CF_ASSETS_BASE_URL }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_TRACES_SAMPLE_RATE: ${{ secrets.SENTRY_TRACES_SAMPLE_RATE }}
+          VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: ${{ secrets.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ secrets.VITE_PUBLIC_POSTHOG_HOST }}
+        run: |
+          set -euo pipefail
+          upload_args=()
+          if [ "$ONTYPE_IOS_UPLOAD" = "true" ]; then
+            upload_args+=(--upload true --wait true)
+          else
+            upload_args+=(--upload false)
+          fi
+
+          bun run cmd app ios release \
+            --app-version "$ONTYPE_IOS_APP_VERSION" \
+            --app-id "$ONTYPE_IOS_APP_ID" \
+            --out dist/ios \
+            --test-notes "Automated TestFlight build from ${ONTYPE_SOURCE_REF}" \
+            "${upload_args[@]}"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: OnType-iOS-${{ env.ONTYPE_IOS_APP_VERSION }}
+          path: OnType/dist/ios/*.ipa
+          if-no-files-found: error
+          retention-days: 14

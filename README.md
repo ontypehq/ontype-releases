@@ -28,9 +28,9 @@ Nightly builds are published as the rolling
 
 ## CI
 
-This public repository hosts the macOS nightly build workflow so GitHub-hosted
-macOS minutes are available to the release pipeline. The workflow checks out the
-private source repositories at build time:
+This public repository hosts the macOS nightly build and iOS TestFlight workflows
+so GitHub-hosted macOS minutes are available to the release pipeline. The
+workflows check out the private source repositories at build time:
 
 - `ontypehq/OnType`
 - `ontypehq/libfst`
@@ -39,8 +39,13 @@ private source repositories at build time:
 Required repository secrets:
 
 - `ONTYPE_SOURCE_TOKEN`: token with read access to the private source repos.
+- `DASHSCOPE_API_KEY`: DashScope key embedded into the current iOS MVP bundle.
 - `NOTARY_KEY_P8_BASE64`: base64-encoded App Store Connect API key file
   (`AuthKey_UPM4638DP7.p8` locally).
+- iOS TestFlight signing and upload secrets: `IOS_DISTRIBUTION_CERT_BASE64`,
+  `IOS_DISTRIBUTION_CERT_PASSWORD`, `IOS_APP_PROFILE_BASE64`,
+  `IOS_KEYBOARD_PROFILE_BASE64`, `ASC_IOS_KEY_ID`, `ASC_IOS_ISSUER_ID`, and
+  `ASC_IOS_KEY_P8_BASE64`.
 - OnType release env copied from the private app repo `.env`: `ONTYPE_AUTH_BASE_URL`,
   `ONTYPE_AUTH_BASE_URL_DEV`, `ONTYPE_AUTH_BASE_URL_PROD`, `CONVEX_URL_DEV`,
   `CONVEX_URL_PROD`, `DEVELOPER_ID_CERT_BASE64`, `P12_PASSWORD`,
@@ -55,6 +60,12 @@ Nightly builds intentionally do not run `bun run app:release --publish`; they
 produce arm64 notarized DMGs and attach them to GitHub Releases only. Multi-arch
 builds and Sparkle/R2 publishing should stay on a separate, explicitly approved
 workflow for formal releases.
+
+The iOS TestFlight workflow is separate from the macOS nightly workflow. It can
+be run manually from this repository, and private `ontypehq/OnType` pushes to
+`main` trigger it through a `repository_dispatch` event. The private source repo
+must define `ONTYPE_RELEASES_DISPATCH_TOKEN`, a token allowed to create dispatch
+events for `ontypehq/ontype-releases`.
 
 ## How it works
 
