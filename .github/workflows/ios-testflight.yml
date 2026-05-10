@@ -63,7 +63,9 @@ jobs:
           path: OnType
           fetch-depth: 1
           lfs: true
-          persist-credentials: false
+          # The source repo currently has an orphan gitlink without .gitmodules;
+          # checkout's credential cleanup runs `git submodule foreach` and fails there.
+          persist-credentials: true
 
       - name: Verify dispatched source SHA
         if: env.ONTYPE_SOURCE_SHA != ''
